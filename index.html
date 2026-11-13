@@ -201,6 +201,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   font: 800 20px var(--display);
   padding: 0 8px;
 }
+.chip.op { min-width: 58px; font-size: 26px; }
 .chip[aria-pressed="true"] { background: var(--hl); color: var(--on-hl); box-shadow: 2px 2px 0 var(--shadow); }
 .ghost {
   background: transparent;
@@ -220,6 +221,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   padding: 12px 24px;
   min-height: 50px;
 }
+.btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }
 .btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
 .btn.plain { background: var(--paper); color: var(--ink); }
 .btns { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -328,7 +330,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .board li.me .tb, .board li.me .dt { color: var(--on-hl); }
 
 /* Mappa */
-.map { display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px; }
+.map { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; }
 .map .lab { display: flex; align-items: center; justify-content: center; font: 800 14px var(--display); color: var(--muted); min-height: 24px; }
 .cell {
   aspect-ratio: 1;
@@ -336,7 +338,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   padding: 0;
   border: 2px solid var(--line);
   border-radius: 6px;
-  font: 700 clamp(10px, 2.5vw, 15px) var(--body);
+  font: 700 clamp(9px, 2.3vw, 14px) var(--body);
   font-variant-numeric: tabular-nums;
   color: var(--on-m);
 }
@@ -403,7 +405,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   <!-- SCOPRI -->
   <section id="p-scopri" role="tabpanel" aria-labelledby="t-scopri" class="stack">
     <div class="card stack">
-      <div class="label">Scegli la tabellina</div>
+      <div class="label">Scegli la tabellina (moltiplicazione)</div>
       <div class="chips" id="nChips"></div>
     </div>
     <div class="card stack">
@@ -433,7 +435,9 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
         <button type="button" role="radio" id="m-round" aria-checked="true">10 domande</button>
         <button type="button" role="radio" id="m-timed" aria-checked="false">60 secondi</button>
       </div>
-      <div class="label">Quali tabelline?</div>
+      <div class="label">Che operazione?</div>
+      <div class="chips" id="opChips"></div>
+      <div class="label">Con quali numeri?</div>
       <div class="chips" id="selChips"></div>
       <div class="btns">
         <button type="button" class="ghost" id="qAll">Tutte</button>
@@ -490,6 +494,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   <section id="p-mappa" role="tabpanel" aria-labelledby="t-mappa" class="stack" hidden>
     <div class="card stack">
       <div class="counts num" id="counts"></div>
+      <p class="info" id="otherCounts"></p>
       <div class="map" id="map"></div>
       <div class="legend">
         <span><i class="l0"></i>Mai provata</span>
@@ -523,7 +528,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
           save.board = o.board.filter(function (e) {
             return e && isFinite(e.s) && e.s > 0 && isFinite(e.d) && typeof e.t === "string";
           }).map(function (e) {
-            return { s: e.s | 0, d: +e.d, t: e.t.slice(0, 24) };
+            return { s: e.s | 0, d: +e.d, t: e.t.slice(0, 32) };
           }).sort(function (a, b) { return b.s - a.s; }).slice(0, 10);
         }
         save.best = save.board.length ? save.board[0].s : 0;
@@ -531,21 +536,70 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     }
   } catch (e) {}
   function persist() { try { localStorage.setItem(STORE, JSON.stringify(save)); } catch (e) {} }
+
+  /* ---------- Stato ---------- */
+  var S = { tab: "scopri", n: 3, k: 4, sel: [3], ops: ["x"], mode: "round" };
+  var G = null;
+  var OPSYM = { x: "×", d: "÷", a: "+", s: "−" };
+  var OPNAME = { x: "Moltiplicazione", d: "Divisione", a: "Addizione", s: "Sottrazione" };
+  var OPORDER = ["x", "d", "a", "s"];
+
+  /* ---------- Domande (funzioni pure) ---------- */
+  /* BEGIN-PURE */
+  // Moltiplicazione: chiave "3x7" (come nelle versioni precedenti, cosi' i progressi restano).
+  // Divisione "d56/8", addizione "a3+4", sottrazione "s13-7".
   function key(a, b) { return a < b ? a + "x" + b : b + "x" + a; }
-  function lvl(a, b) { return save.facts[key(a, b)] || 0; }
-  function record(a, b, ok) {
-    var k = key(a, b), l = save.facts[k] || 0;
+  function fkey(f) {
+    if (f.op === "x") return key(f.a, f.b);
+    if (f.op === "d") return "d" + (f.a * f.b) + "/" + f.a;
+    if (f.op === "a") return "a" + Math.min(f.a, f.b) + "+" + Math.max(f.a, f.b);
+    return "s" + (f.a + f.b) + "-" + f.a;
+  }
+  function mkQ(f) {
+    var a = f.a, b = f.b, flip = Math.random() < 0.5, x = flip ? b : a, y = flip ? a : b;
+    if (f.op === "x") return { f: f, key: fkey(f), text: x + " × " + y + " =", ans: a * b };
+    if (f.op === "d") return { f: f, key: fkey(f), text: (a * b) + " ÷ " + a + " =", ans: b };
+    if (f.op === "a") return { f: f, key: fkey(f), text: x + " + " + y + " =", ans: a + b };
+    return { f: f, key: fkey(f), text: (a + b) + " − " + a + " =", ans: b };
+  }
+  function buildPool() {
+    var seen = {}, out = [];
+    S.ops.forEach(function (op) {
+      S.sel.forEach(function (t) {
+        if (op === "d" && t === 0) return;
+        for (var b = 0; b <= 10; b++) {
+          var f = { op: op, a: t, b: b }, k = fkey(f);
+          if (!seen[k]) { seen[k] = 1; out.push(f); }
+        }
+      });
+    });
+    return out;
+  }
+  function tabLabel(sel) {
+    var a = sel.slice().sort(function (x, y) { return x - y; }), out = [], i = 0;
+    if (a.length === 11) return "tutti";
+    while (i < a.length) {
+      var j = i;
+      while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++;
+      out.push(j - i >= 2 ? a[i] + "-" + a[j] : a.slice(i, j + 1).join(", "));
+      i = j + 1;
+    }
+    return out.join(", ");
+  }
+  /* END-PURE */
+
+  function lvlK(k) { return save.facts[k] || 0; }
+  function lvl(a, b) { return lvlK(key(a, b)); }
+  function record(k, ok) {
+    var l = save.facts[k] || 0;
     save.facts[k] = ok ? Math.min(3, l === 0 ? 2 : l + 1) : 1;
     if (ok) save.eaten++;
     persist();
     $("eatenN").textContent = save.eaten;
   }
 
-  /* ---------- Stato ---------- */
-  var S = { tab: "scopri", n: 3, k: 4, sel: [3], mode: "round" };
-  var G = null;
-
   var HINTS = {
+    0: "Qualsiasi numero per 0 fa 0: zero gruppi, o gruppi vuoti, non hanno niente dentro. 0 × 9 = 0 e anche 9 × 0 = 0.",
     1: "Un gruppo solo: il numero resta uguale. 1 × 8 = 8.",
     2: "È il doppio: 2 × 7 = 7 + 7 = 14. I risultati sono sempre pari.",
     3: "Conta a salti di 3: 3, 6, 9, 12, 15… Oppure fai il doppio e aggiungi un gruppo: 3 × 6 = 12 + 6 = 18.",
@@ -558,7 +612,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     10: "Aggiungi uno zero: 10 × 7 = 70."
   };
   var IDLE = {
-    scopri: "Scegli una tabellina e tocca le righe: guarda come crescono i gruppi!",
+    scopri: "Scegli un numero e tocca le righe: guarda come crescono i gruppi!",
     gioca: "Ho fame! Dammi risposte giuste e le mangio tutte.",
     mappa: "Ogni risposta giusta colora la mappa. Quanto verde riesci a fare?"
   };
@@ -574,20 +628,24 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   }
 
   /* ---------- Chip ---------- */
-  function chipRow(box, isOn, onClick) {
+  function chipRow(box, isOn, onClick, label) {
     box.innerHTML = "";
-    for (var i = 1; i <= 10; i++) {
+    for (var i = 0; i <= 10; i++) {
       (function (i) {
         var b = document.createElement("button");
         b.type = "button";
         b.className = "chip";
         b.textContent = i;
         b.setAttribute("aria-pressed", isOn(i) ? "true" : "false");
-        b.setAttribute("aria-label", "Tabellina del " + i);
+        b.setAttribute("aria-label", (label || "Numero ") + i);
         b.onclick = function () { onClick(i); };
         box.appendChild(b);
       })(i);
     }
+  }
+  function art(n, kind) {
+    if (kind === "il") return n === 0 ? "lo zero" : n === 8 || n === 11 ? "l'" + n : "il " + n;
+    return n === 0 ? "dello zero" : n === 8 ? "dell'8" : "del " + n;
   }
 
   /* ---------- Schede ---------- */
@@ -606,28 +664,35 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   }
   PANELS.forEach(function (p) { $("t-" + p).onclick = function () { setTab(p); }; });
 
-  /* ---------- Scopri ---------- */
+  /* ---------- Scopri (moltiplicazione) ---------- */
   function renderScopri() {
     var n = S.n, k = S.k, cell = 26;
-    chipRow($("nChips"), function (i) { return i === n; }, function (i) { S.n = i; renderScopri(); });
+    chipRow($("nChips"), function (i) { return i === n; }, function (i) { S.n = i; renderScopri(); }, "Tabellina del ");
     $("eq").textContent = n + " × " + k + " = " + (n * k);
-    $("eqSub").textContent = k + (k === 1 ? " gruppo" : " gruppi") + " da " + n + (n !== k ? " · uguale a " + k + " × " + n : "");
-    var c = "";
-    for (var r = 0; r < k; r++) for (var q = 0; q < n; q++) {
-      c += '<circle class="d' + (r % 2) + '" cx="' + (q * cell + 13) + '" cy="' + (r * cell + 13) + '" r="9"/>';
+    $("eqSub").textContent = k + (k === 1 ? " gruppo" : " gruppi") + " da " + n +
+      (n === 0 || k === 0 ? " · niente puntini" : "") + (n !== k ? " · uguale a " + k + " × " + n : "");
+    var svg = $("arr"), c = "";
+    if (n === 0 || k === 0) {
+      svg.setAttribute("viewBox", "0 0 220 60");
+      svg.style.maxWidth = "220px";
+      svg.innerHTML = '<text x="110" y="36" text-anchor="middle" style="fill:var(--muted)" font-size="20" font-weight="800" font-family="Nunito, sans-serif">Nessun puntino!</text>';
+    } else {
+      for (var r = 0; r < k; r++) for (var q = 0; q < n; q++) {
+        c += '<circle class="d' + (r % 2) + '" cx="' + (q * cell + 13) + '" cy="' + (r * cell + 13) + '" r="9"/>';
+      }
+      svg.setAttribute("viewBox", "0 0 " + (n * cell) + " " + (k * cell));
+      svg.style.maxWidth = Math.max(90, n * cell * 1.3) + "px";
+      svg.innerHTML = c;
     }
-    var svg = $("arr");
-    svg.setAttribute("viewBox", "0 0 " + (n * cell) + " " + (k * cell));
-    svg.style.maxWidth = Math.max(90, n * cell * 1.3) + "px";
-    svg.innerHTML = c;
     var j = "";
+    if (k === 0) j = '<span class="jump last">0</span>';
     for (var i = 1; i <= k; i++) j += '<span class="jump' + (i === k ? " last" : "") + '">' + (i * n) + "</span>";
     $("jumps").innerHTML = j;
-    $("hintT").textContent = "Il trucco del " + n;
+    $("hintT").textContent = "Il trucco " + art(n);
     $("hintP").textContent = HINTS[n];
     var rows = $("rows");
     rows.innerHTML = "";
-    for (var m = 1; m <= 10; m++) {
+    for (var m = 0; m <= 10; m++) {
       (function (m) {
         var b = document.createElement("button");
         b.type = "button";
@@ -638,27 +703,35 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
         rows.appendChild(b);
       })(m);
     }
-    $("goPlay").textContent = "Allenati con il " + n;
+    $("goPlay").textContent = "Allenati con " + art(n, "il");
   }
-  $("goPlay").onclick = function () { S.sel = [S.n]; setTab("gioca"); };
+  $("goPlay").onclick = function () { S.sel = [S.n]; S.ops = ["x"]; setTab("gioca"); };
 
   /* ---------- Gioca: impostazione ---------- */
-  function buildPool() {
-    var seen = {}, out = [];
-    S.sel.forEach(function (t) {
-      for (var b = 1; b <= 10; b++) {
-        var k = key(t, b);
-        if (!seen[k]) { seen[k] = 1; out.push([t, b]); }
-      }
-    });
-    return out;
-  }
   function showView(v) {
     $("v-setup").hidden = v !== "setup";
     $("v-play").hidden = v !== "play";
     $("v-result").hidden = v !== "result";
   }
   function renderSetup() {
+    var oc = $("opChips");
+    oc.innerHTML = "";
+    OPORDER.forEach(function (op) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "chip op";
+      b.textContent = OPSYM[op];
+      b.setAttribute("aria-pressed", S.ops.indexOf(op) >= 0 ? "true" : "false");
+      b.setAttribute("aria-label", OPNAME[op]);
+      b.onclick = function () {
+        var x = S.ops.indexOf(op);
+        if (x >= 0) { if (S.ops.length > 1) S.ops.splice(x, 1); }
+        else S.ops.push(op);
+        S.ops.sort(function (p, q) { return OPORDER.indexOf(p) - OPORDER.indexOf(q); });
+        renderSetup();
+      };
+      oc.appendChild(b);
+    });
     chipRow($("selChips"), function (i) { return S.sel.indexOf(i) >= 0; }, function (i) {
       var x = S.sel.indexOf(i);
       if (x >= 0) { if (S.sel.length > 1) S.sel.splice(x, 1); }
@@ -669,19 +742,26 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     $("m-round").setAttribute("aria-checked", S.mode === "round" ? "true" : "false");
     $("m-timed").setAttribute("aria-checked", S.mode === "timed" ? "true" : "false");
     var pool = buildPool();
-    $("setupInfo").textContent = S.sel.length + (S.sel.length === 1 ? " tabellina" : " tabelline") + " · " + pool.length + " moltiplicazioni diverse";
+    var info;
+    if (!pool.length) info = "Per la divisione scegli almeno un numero da 1 in su.";
+    else {
+      info = S.sel.length + (S.sel.length === 1 ? " numero" : " numeri") + " · " + pool.length + " domande diverse";
+      if (S.ops.indexOf("a") >= 0 || S.ops.indexOf("s") >= 0) info += " · Con + e − il numero scelto è quello che si aggiunge o si toglie.";
+    }
+    $("setupInfo").textContent = info;
+    $("startBtn").disabled = !pool.length;
     var sb = $("setupBoardBox");
     sb.hidden = !(S.mode === "timed" && save.board.length);
     if (!sb.hidden) renderBoard($("setupBoard"), -1);
   }
   $("m-round").onclick = function () { S.mode = "round"; renderSetup(); };
   $("m-timed").onclick = function () { S.mode = "timed"; renderSetup(); };
-  $("qAll").onclick = function () { S.sel = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; renderSetup(); };
+  $("qAll").onclick = function () { S.sel = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; renderSetup(); };
   $("qHard").onclick = function () { S.sel = [6, 7, 8, 9]; renderSetup(); };
   $("startBtn").onclick = function () { startGame(null); };
 
   /* ---------- Gioca: partita ---------- */
-  function weight(f) { return [3, 5, 2, 1][lvl(f[0], f[1])]; }
+  function weight(f) { return [3, 5, 2, 1][lvlK(fkey(f))]; }
   function wpick(arr) {
     var tot = 0, i;
     for (i = 0; i < arr.length; i++) tot += weight(arr[i]);
@@ -698,7 +778,6 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
     return a;
   }
-  function orient(f) { return Math.random() < 0.5 ? [f[1], f[0]] : [f[0], f[1]]; }
   function later(fn, ms) {
     var g = G;
     g.timers.push(setTimeout(function () { if (G === g) fn(); }, ms));
@@ -706,13 +785,17 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   function stopGame() {
     if (G) { clearInterval(G.tick); G.timers.forEach(clearTimeout); G = null; }
   }
+  function opsLabel() {
+    return S.ops.length === 1 && S.ops[0] === "x" ? "×" : S.ops.map(function (o) { return OPSYM[o]; }).join("");
+  }
 
   function startGame(list) {
     stopGame();
     var mode = list ? "round" : S.mode;
     var pool = list || buildPool();
+    if (!pool.length) return;
     G = {
-      mode: mode, pool: pool, label: tabLabel(S.sel),
+      mode: mode, pool: pool, label: opsLabel() + " " + tabLabel(S.sel),
       queue: mode === "round" ? (list ? shuffle(list.slice()) : makeRound(pool)) : null,
       i: 0, correct: 0, res: [], wrong: [], streak: 0,
       input: "", locked: false, waitNext: false, cur: null, last: null,
@@ -743,10 +826,10 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       f = G.queue[G.i];
     } else {
       var tries = 0;
-      do { f = G.pool[wpick(G.pool)]; tries++; } while (G.pool.length > 1 && key(f[0], f[1]) === G.last && tries < 8);
+      do { f = G.pool[wpick(G.pool)]; tries++; } while (G.pool.length > 1 && fkey(f) === G.last && tries < 8);
     }
-    G.last = key(f[0], f[1]);
-    G.cur = orient(f);
+    G.last = fkey(f);
+    G.cur = mkQ(f);
     G.input = "";
     G.locked = false;
     G.waitNext = false;
@@ -754,8 +837,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     if (mon.getAttribute("data-mood") !== "idle") say(null, "idle");
   }
   function renderQ() {
-    var a = G.cur[0], b = G.cur[1];
-    $("qText").textContent = a + " × " + b + " =";
+    $("qText").textContent = G.cur.text;
     setAns();
     $("fb").textContent = "";
     $("fb").className = "fb";
@@ -780,7 +862,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     if (!G || G.locked || G.input.length >= 3) return;
     G.input += d;
     setAns();
-    if (G.input.length >= String(G.cur[0] * G.cur[1]).length) submit();
+    if (G.input.length >= String(G.cur.ans).length) submit();
   }
   function back() {
     if (!G || G.locked) return;
@@ -790,8 +872,8 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   function submit() {
     if (!G || G.locked || !G.input) return;
     G.locked = true;
-    var a = G.cur[0], b = G.cur[1], ans = a * b, ok = parseInt(G.input, 10) === ans;
-    record(a, b, ok);
+    var q = G.cur, ok = parseInt(G.input, 10) === q.ans;
+    record(q.key, ok);
     if (G.mode === "round") G.res.push(ok ? "ok" : "bad");
     if (ok) {
       G.correct++; G.streak++;
@@ -804,11 +886,11 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       later(nextQ, 650);
     } else {
       G.streak = 0;
-      G.wrong.push([a, b]);
+      G.wrong.push(q);
       setAns("bad");
       $("fb").className = "fb bad";
-      $("fb").textContent = a + " × " + b + " = " + ans;
-      say("Ahi, indigesta! " + a + " × " + b + " fa " + ans + ".", "oops", "wobble");
+      $("fb").textContent = q.text + " " + q.ans;
+      say("Ahi, indigesta! " + q.text.replace(/\s*=$/, "") + " fa " + q.ans + ".", "oops", "wobble");
       if (G.mode === "round") {
         G.i++;
         G.waitNext = true;
@@ -848,17 +930,6 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
   });
 
   /* ---------- Classifica ---------- */
-  function tabLabel(sel) {
-    var a = sel.slice().sort(function (x, y) { return x - y; }), out = [], i = 0;
-    if (a.length === 10) return "tutte";
-    while (i < a.length) {
-      var j = i;
-      while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++;
-      out.push(j - i >= 2 ? a[i] + "-" + a[j] : a.slice(i, j + 1).join(", "));
-      i = j + 1;
-    }
-    return out.join(", ");
-  }
   function renderBoard(ol, hi) {
     ol.innerHTML = "";
     save.board.forEach(function (e, i) {
@@ -866,7 +937,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       if (i === hi) li.className = "me";
       var n = document.createElement("b"); n.textContent = i + 1;
       var sc = document.createElement("span"); sc.className = "sc num"; sc.textContent = e.s;
-      var tb = document.createElement("span"); tb.className = "tb"; tb.textContent = "tab. " + e.t;
+      var tb = document.createElement("span"); tb.className = "tb"; tb.textContent = e.t;
       var dt = document.createElement("span"); dt.className = "dt";
       dt.textContent = new Date(e.d).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
       li.appendChild(n); li.appendChild(sc); li.appendChild(tb); li.appendChild(dt);
@@ -882,18 +953,17 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     g.timers.forEach(clearTimeout);
     G = null;
     showView("result");
-    var wrongBox = $("resWrongBox");
     var wl = $("resWrong");
     wl.innerHTML = "";
     g.wrong.forEach(function (w) {
       var s = document.createElement("span");
-      s.textContent = w[0] + " × " + w[1] + " = " + (w[0] * w[1]);
+      s.textContent = w.text + " " + w.ans;
       wl.appendChild(s);
     });
-    wrongBox.hidden = g.wrong.length === 0;
+    $("resWrongBox").hidden = g.wrong.length === 0;
     $("resBoardBox").hidden = true;
     $("reviewBtn").hidden = g.wrong.length === 0;
-    $("reviewBtn").onclick = function () { startGame(g.wrong.map(function (w) { return [w[0], w[1]]; })); };
+    $("reviewBtn").onclick = function () { startGame(g.wrong.map(function (w) { return w.f; })); };
     $("againBtn").onclick = function () { startGame(null); };
     $("changeBtn").onclick = function () { showView("setup"); renderSetup(); say(IDLE.gioca, "idle"); };
     if (g.mode === "round") {
@@ -904,7 +974,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       $("resStars").innerHTML = s;
       $("resStars").hidden = false;
       $("resBig").textContent = g.correct + " su " + total;
-      $("resSub").textContent = stars === 3 ? "Perfetto, tabellina da campioni!" : stars === 2 ? "Molto bene! Ripassa gli errori e sei al top." : "Ogni errore è un boccone da digerire. Riprova!";
+      $("resSub").textContent = stars === 3 ? "Perfetto, da campioni!" : stars === 2 ? "Molto bene! Ripassa gli errori e sei al top." : "Ogni errore è un boccone da digerire. Riprova!";
       say(stars === 3 ? "Che banchetto! Pancia piena!" : stars === 2 ? "Buono, ma ho ancora un buco nello stomaco." : "Ne ho mangiate un po'. Rifacciamo?", stars >= 2 ? "happy" : "idle", stars >= 2 ? "bounce" : null);
     } else {
       var hi = -1;
@@ -912,7 +982,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
         var bd = save.board, pos = bd.length;
         for (var q = 0; q < bd.length; q++) { if (g.correct > bd[q].s) { pos = q; break; } }
         if (pos < 10) {
-          bd.splice(pos, 0, { s: g.correct, d: Date.now(), t: g.label || "tutte" });
+          bd.splice(pos, 0, { s: g.correct, d: Date.now(), t: g.label });
           if (bd.length > 10) bd.length = 10;
           hi = pos;
         }
@@ -928,22 +998,28 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     }
   }
 
-  /* ---------- Mappa ---------- */
+  /* ---------- Mappa (tavola della moltiplicazione) ---------- */
   var LV = ["mai provata", "da ripassare", "in allenamento", "imparata"];
   function renderMappa() {
     var h = "<span></span>", r, c;
-    for (c = 1; c <= 10; c++) h += '<span class="lab">' + c + "</span>";
-    for (r = 1; r <= 10; r++) {
+    for (c = 0; c <= 10; c++) h += '<span class="lab">' + c + "</span>";
+    for (r = 0; r <= 10; r++) {
       h += '<span class="lab">' + r + "</span>";
-      for (c = 1; c <= 10; c++) {
+      for (c = 0; c <= 10; c++) {
         var l = lvl(r, c);
         h += '<button type="button" class="cell l' + l + '" data-r="' + r + '" data-c="' + c + '" aria-label="' + r + " per " + c + " fa " + (r * c) + ", " + LV[l] + '">' + (r * c) + "</button>";
       }
     }
     $("map").innerHTML = h;
     var cnt = [0, 0, 0, 0];
-    for (r = 1; r <= 10; r++) for (c = r; c <= 10; c++) cnt[lvl(r, c)]++;
-    $("counts").innerHTML = "<span>Imparate: " + cnt[3] + " su 55</span><span>In allenamento: " + cnt[2] + "</span><span>Da ripassare: " + cnt[1] + "</span>";
+    for (r = 0; r <= 10; r++) for (c = r; c <= 10; c++) cnt[lvl(r, c)]++;
+    var other = { d: 0, a: 0, s: 0 };
+    Object.keys(save.facts).forEach(function (k) {
+      var ch = k.charAt(0);
+      if (other[ch] !== undefined && save.facts[k] === 3) other[ch]++;
+    });
+    $("counts").innerHTML = "<span>Imparate: " + cnt[3] + " su 66</span><span>In allenamento: " + cnt[2] + "</span><span>Da ripassare: " + cnt[1] + "</span>";
+    $("otherCounts").textContent = "Imparate nelle altre operazioni: divisioni " + other.d + " su 110, addizioni " + other.a + " su 66, sottrazioni " + other.s + " su 121.";
     resetRow(false);
   }
   $("map").onclick = function (e) {
@@ -959,7 +1035,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       row.innerHTML = '<button type="button" class="ghost" id="resetBtn">Azzera i progressi</button>';
       $("resetBtn").onclick = function () { resetRow(true); };
     } else {
-      row.innerHTML = '<span class="info">Sicuro? Si perde tutto.</span><button type="button" class="ghost" id="resetYes">Sì, azzera</button><button type="button" class="ghost" id="resetNo">No</button>';
+      row.innerHTML = '<span class="info">Sicuro? Si perde tutto, classifica compresa.</span><button type="button" class="ghost" id="resetYes">Sì, azzera</button><button type="button" class="ghost" id="resetNo">No</button>';
       $("resetYes").onclick = function () {
         save = { facts: {}, eaten: 0, best: 0, board: [] };
         persist();
@@ -972,15 +1048,19 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
   /* ---------- Avvio ---------- */
   var hot = window.claude && window.claude.hot;
-  if (hot && hot.snapshot) hot.snapshot(function () { return { tab: S.tab, n: S.n, k: S.k, sel: S.sel, mode: S.mode }; });
-  function int10(v, d) { v = v | 0; return v >= 1 && v <= 10 ? v : d; }
+  if (hot && hot.snapshot) hot.snapshot(function () { return { tab: S.tab, n: S.n, k: S.k, sel: S.sel, ops: S.ops, mode: S.mode }; });
+  function int10(v, d) { v = +v; return Number.isInteger(v) && v >= 0 && v <= 10 ? v : d; }
   function start(d) {
     d = d || {};
     S.n = int10(d.n, S.n);
     S.k = int10(d.k, S.k);
     if (Array.isArray(d.sel)) {
-      var s = d.sel.map(function (x) { return x | 0; }).filter(function (x) { return x >= 1 && x <= 10; });
+      var s = d.sel.map(Number).filter(function (x) { return Number.isInteger(x) && x >= 0 && x <= 10; });
       if (s.length) S.sel = s;
+    }
+    if (Array.isArray(d.ops)) {
+      var p = OPORDER.filter(function (o) { return d.ops.indexOf(o) >= 0; });
+      if (p.length) S.ops = p;
     }
     if (d.mode === "round" || d.mode === "timed") S.mode = d.mode;
     $("eatenN").textContent = save.eaten;
