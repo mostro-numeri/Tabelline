@@ -309,6 +309,24 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .wl { display: flex; flex-wrap: wrap; gap: 8px; }
 .wl span { border: 2px solid var(--line); border-radius: 10px; padding: 4px 10px; font-weight: 800; font-variant-numeric: tabular-nums; background: var(--m1); color: var(--on-m); }
 
+/* Classifica */
+.board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.board li {
+  display: grid;
+  grid-template-columns: 30px 52px 1fr auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.board li b { font-family: var(--display); font-size: 18px; }
+.board .sc { font-family: var(--display); font-size: 22px; }
+.board .tb, .board .dt { color: var(--muted); font-weight: 700; font-size: 14px; }
+.board li.me { background: var(--hl); color: var(--on-hl); }
+.board li.me .tb, .board li.me .dt { color: var(--on-hl); }
+
 /* Mappa */
 .map { display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px; }
 .map .lab { display: flex; align-items: center; justify-content: center; font: 800 14px var(--display); color: var(--muted); min-height: 24px; }
@@ -421,6 +439,10 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
         <button type="button" class="ghost" id="qAll">Tutte</button>
         <button type="button" class="ghost" id="qHard">Le difficili (6-9)</button>
       </div>
+      <div id="setupBoardBox" class="stack" hidden>
+        <div class="label">Classifica dei 60 secondi</div>
+        <ol class="board" id="setupBoard"></ol>
+      </div>
       <p class="info" id="setupInfo"></p>
       <div class="btns"><button type="button" class="btn" id="startBtn">Via!</button></div>
     </div>
@@ -451,6 +473,10 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       <div id="resWrongBox" class="stack" hidden>
         <div class="label">Da ripassare</div>
         <div class="wl" id="resWrong"></div>
+      </div>
+      <div id="resBoardBox" class="stack" hidden>
+        <div class="label">Classifica dei 60 secondi</div>
+        <ol class="board" id="resBoard"></ol>
       </div>
       <div class="btns" style="justify-content:center">
         <button type="button" class="btn" id="againBtn">Ancora!</button>
@@ -485,7 +511,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
   /* ---------- Salvataggio (solo su questo browser) ---------- */
   var STORE = "mostro-tabelline-v1";
-  var save = { facts: {}, eaten: 0, best: 0 };
+  var save = { facts: {}, eaten: 0, best: 0, board: [] };
   try {
     var raw = localStorage.getItem(STORE);
     if (raw) {
@@ -493,7 +519,14 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       if (o && typeof o === "object") {
         save.facts = o.facts && typeof o.facts === "object" ? o.facts : {};
         save.eaten = o.eaten | 0;
-        save.best = o.best | 0;
+        if (Array.isArray(o.board)) {
+          save.board = o.board.filter(function (e) {
+            return e && isFinite(e.s) && e.s > 0 && isFinite(e.d) && typeof e.t === "string";
+          }).map(function (e) {
+            return { s: e.s | 0, d: +e.d, t: e.t.slice(0, 24) };
+          }).sort(function (a, b) { return b.s - a.s; }).slice(0, 10);
+        }
+        save.best = save.board.length ? save.board[0].s : 0;
       }
     }
   } catch (e) {}
@@ -637,6 +670,9 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     $("m-timed").setAttribute("aria-checked", S.mode === "timed" ? "true" : "false");
     var pool = buildPool();
     $("setupInfo").textContent = S.sel.length + (S.sel.length === 1 ? " tabellina" : " tabelline") + " · " + pool.length + " moltiplicazioni diverse";
+    var sb = $("setupBoardBox");
+    sb.hidden = !(S.mode === "timed" && save.board.length);
+    if (!sb.hidden) renderBoard($("setupBoard"), -1);
   }
   $("m-round").onclick = function () { S.mode = "round"; renderSetup(); };
   $("m-timed").onclick = function () { S.mode = "timed"; renderSetup(); };
@@ -676,7 +712,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     var mode = list ? "round" : S.mode;
     var pool = list || buildPool();
     G = {
-      mode: mode, pool: pool,
+      mode: mode, pool: pool, label: tabLabel(S.sel),
       queue: mode === "round" ? (list ? shuffle(list.slice()) : makeRound(pool)) : null,
       i: 0, correct: 0, res: [], wrong: [], streak: 0,
       input: "", locked: false, waitNext: false, cur: null, last: null,
@@ -811,6 +847,33 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     }
   });
 
+  /* ---------- Classifica ---------- */
+  function tabLabel(sel) {
+    var a = sel.slice().sort(function (x, y) { return x - y; }), out = [], i = 0;
+    if (a.length === 10) return "tutte";
+    while (i < a.length) {
+      var j = i;
+      while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++;
+      out.push(j - i >= 2 ? a[i] + "-" + a[j] : a.slice(i, j + 1).join(", "));
+      i = j + 1;
+    }
+    return out.join(", ");
+  }
+  function renderBoard(ol, hi) {
+    ol.innerHTML = "";
+    save.board.forEach(function (e, i) {
+      var li = document.createElement("li");
+      if (i === hi) li.className = "me";
+      var n = document.createElement("b"); n.textContent = i + 1;
+      var sc = document.createElement("span"); sc.className = "sc num"; sc.textContent = e.s;
+      var tb = document.createElement("span"); tb.className = "tb"; tb.textContent = "tab. " + e.t;
+      var dt = document.createElement("span"); dt.className = "dt";
+      dt.textContent = new Date(e.d).toLocaleDateString("it-IT", { day: "numeric", month: "short" });
+      li.appendChild(n); li.appendChild(sc); li.appendChild(tb); li.appendChild(dt);
+      ol.appendChild(li);
+    });
+  }
+
   /* ---------- Risultato ---------- */
   var STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon class="CLS" points="12,2 15,9 22,9.5 16.5,14 18.5,21.5 12,17.5 5.5,21.5 7.5,14 2,9.5 9,9"/></svg>';
   function finish() {
@@ -828,6 +891,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       wl.appendChild(s);
     });
     wrongBox.hidden = g.wrong.length === 0;
+    $("resBoardBox").hidden = true;
     $("reviewBtn").hidden = g.wrong.length === 0;
     $("reviewBtn").onclick = function () { startGame(g.wrong.map(function (w) { return [w[0], w[1]]; })); };
     $("againBtn").onclick = function () { startGame(null); };
@@ -843,12 +907,24 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
       $("resSub").textContent = stars === 3 ? "Perfetto, tabellina da campioni!" : stars === 2 ? "Molto bene! Ripassa gli errori e sei al top." : "Ogni errore è un boccone da digerire. Riprova!";
       say(stars === 3 ? "Che banchetto! Pancia piena!" : stars === 2 ? "Buono, ma ho ancora un buco nello stomaco." : "Ne ho mangiate un po'. Rifacciamo?", stars >= 2 ? "happy" : "idle", stars >= 2 ? "bounce" : null);
     } else {
-      var rec = g.correct > save.best;
-      if (rec) { save.best = g.correct; persist(); }
+      var hi = -1;
+      if (g.correct > 0) {
+        var bd = save.board, pos = bd.length;
+        for (var q = 0; q < bd.length; q++) { if (g.correct > bd[q].s) { pos = q; break; } }
+        if (pos < 10) {
+          bd.splice(pos, 0, { s: g.correct, d: Date.now(), t: g.label || "tutte" });
+          if (bd.length > 10) bd.length = 10;
+          hi = pos;
+        }
+        save.best = bd.length ? bd[0].s : 0;
+        persist();
+      }
       $("resStars").hidden = true;
       $("resBig").textContent = g.correct + (g.correct === 1 ? " risposta" : " risposte");
-      $("resSub").textContent = rec ? "Nuovo record!" : "Il tuo record è " + save.best + ".";
-      say(rec ? "Record! Non ho mai mangiato così tanto!" : "Tempo scaduto! Che corsa!", "happy", "bounce");
+      $("resSub").textContent = hi === 0 ? "Nuovo record!" : hi > 0 ? "Sei al " + (hi + 1) + "° posto in classifica!" : "Il record è " + save.best + ".";
+      $("resBoardBox").hidden = !save.board.length;
+      if (save.board.length) renderBoard($("resBoard"), hi);
+      say(hi === 0 ? "Record! Non ho mai mangiato così tanto!" : hi > 0 ? "Sono in classifica! Gnam!" : "Tempo scaduto! Che corsa!", "happy", "bounce");
     }
   }
 
@@ -885,7 +961,7 @@ button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
     } else {
       row.innerHTML = '<span class="info">Sicuro? Si perde tutto.</span><button type="button" class="ghost" id="resetYes">Sì, azzera</button><button type="button" class="ghost" id="resetNo">No</button>';
       $("resetYes").onclick = function () {
-        save = { facts: {}, eaten: 0, best: 0 };
+        save = { facts: {}, eaten: 0, best: 0, board: [] };
         persist();
         $("eatenN").textContent = 0;
         renderMappa();
