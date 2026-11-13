@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mostro Tabelline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&family=Sniglet:wght@800&display=swap" rel="stylesheet">
+<style>
+/* Layout: una colonna da quaderno a quadretti; il Mostro e' sempre in alto e commenta cio' che succede. */
+:root {
+  --bg: #f1f7ff;
+  --grid: #d3e3f7;
+  --paper: #fbfdff;
+  --ink: #1c2a4a;
+  --muted: #5a6a8a;
+  --line: #1c2a4a;
+  --shadow: #1c2a4a;
+  --margin: #ef5b61;
+  --hl: #ffd84d;
+  --on-hl: #1c2a4a;
+  --ok: #1f9a63;
+  --bad: #d93a40;
+  --monster: #8b6cf0;
+  --monster-dark: #5b3fc4;
+  --focus: #2f6fed;
+  --dotA: #2f6fed;
+  --dotB: #ef5b61;
+  --m1: #ffb3aa;
+  --m2: #ffe58a;
+  --m3: #8fe0b5;
+  --on-m: #1c2a4a;
+  --display: "Sniglet", "Trebuchet MS", system-ui, sans-serif;
+  --body: "Nunito", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1325;
+    --grid: #1b2342;
+    --paper: #171c33;
+    --ink: #eef1ff;
+    --muted: #9aa7cf;
+    --line: #4a5788;
+    --shadow: #060816;
+    --margin: #ff7a80;
+    --ok: #4fd195;
+    --bad: #ff7a80;
+    --monster: #a48dff;
+    --monster-dark: #7a5fe0;
+    --focus: #8ab4ff;
+    --dotA: #7aa7ff;
+    --dotB: #ff8f94;
+    --m1: #8a3b43;
+    --m2: #85702a;
+    --m3: #1f7a54;
+    --on-m: #eef1ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1325;
+  --grid: #1b2342;
+  --paper: #171c33;
+  --ink: #eef1ff;
+  --muted: #9aa7cf;
+  --line: #4a5788;
+  --shadow: #060816;
+  --margin: #ff7a80;
+  --ok: #4fd195;
+  --bad: #ff7a80;
+  --monster: #a48dff;
+  --monster-dark: #7a5fe0;
+  --focus: #8ab4ff;
+  --dotA: #7aa7ff;
+  --dotB: #ff8f94;
+  --m1: #8a3b43;
+  --m2: #85702a;
+  --m3: #1f7a54;
+  --on-m: #eef1ff;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.45;
+  min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+body::before {
+  content: "";
+  position: fixed;
+  top: 0; bottom: 0;
+  left: max(8px, calc(50% - 400px));
+  width: 2px;
+  background: var(--margin);
+  opacity: .55;
+  pointer-events: none;
+}
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+h1, h2, h3 { font-family: var(--display); font-weight: 800; margin: 0; text-wrap: balance; letter-spacing: .2px; }
+h1 { font-size: clamp(26px, 7vw, 36px); line-height: 1.05; }
+h2 { font-size: 20px; }
+p { margin: 0; }
+button { font-family: inherit; color: inherit; touch-action: manipulation; cursor: pointer; }
+button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.num { font-variant-numeric: tabular-nums; }
+
+.card {
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 4px 4px 0 var(--shadow);
+  padding: 16px;
+}
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.label { font-weight: 800; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+/* Intestazione */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.eaten { text-align: right; line-height: 1.1; }
+.eaten b { display: block; font-family: var(--display); font-size: 28px; }
+.eaten small { color: var(--muted); font-weight: 700; font-size: 12px; }
+
+/* Mostro */
+.pal { display: flex; align-items: center; gap: 18px; padding: 10px 16px 10px 12px; }
+.monster { width: 104px; height: auto; flex: none; transform-origin: 50% 90%; overflow: visible; }
+.monster .eyes { transform-box: fill-box; transform-origin: center; animation: blink 5.5s infinite; }
+.monster .m-idle, .monster .m-happy, .monster .m-oops { display: none; }
+.monster[data-mood="idle"] .m-idle { display: inline; }
+.monster[data-mood="happy"] .m-happy { display: inline; }
+.monster[data-mood="oops"] .m-oops { display: inline; }
+.monster.bounce { animation: bounce .6s; }
+.monster.wobble { animation: wobble .5s; }
+@keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 97% { transform: scaleY(.1); } }
+@keyframes bounce { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-14px) scale(1.05, .95); } 60% { transform: translateY(0) scale(.96, 1.04); } }
+@keyframes wobble { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+.bubble {
+  position: relative;
+  background: var(--hl);
+  color: var(--on-hl);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-weight: 800;
+  font-size: 17px;
+  line-height: 1.3;
+  flex: 1;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+}
+.bubble::before {
+  content: "";
+  position: absolute;
+  left: -9px; top: 18px;
+  width: 14px; height: 14px;
+  background: var(--hl);
+  border-left: 2px solid var(--line);
+  border-bottom: 2px solid var(--line);
+  transform: rotate(45deg);
+}
+
+/* Schede */
+.tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.tab {
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 11px 6px;
+  font: 800 18px var(--display);
+  min-height: 48px;
+}
+.tab[aria-selected="true"] { background: var(--hl); color: var(--on-hl); box-shadow: 3px 3px 0 var(--shadow); }
+
+/* Chip numerici */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  min-width: 46px; height: 46px;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  font: 800 20px var(--display);
+  padding: 0 8px;
+}
+.chip[aria-pressed="true"] { background: var(--hl); color: var(--on-hl); box-shadow: 2px 2px 0 var(--shadow); }
+.ghost {
+  background: transparent;
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  padding: 8px 14px;
+  font-weight: 800;
+  min-height: 40px;
+}
+.btn {
+  background: var(--hl);
+  color: var(--on-hl);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 3px 3px 0 var(--shadow);
+  font: 800 20px var(--display);
+  padding: 12px 24px;
+  min-height: 50px;
+}
+.btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--shadow); }
+.btn.plain { background: var(--paper); color: var(--ink); }
+.btns { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* Scopri */
+.eq { font-family: var(--display); font-size: clamp(40px, 11vw, 64px); line-height: 1; }
+.eq-sub { color: var(--muted); font-weight: 700; }
+.arr-wrap { display: flex; justify-content: center; padding: 4px 0; }
+#arr { width: 100%; height: auto; max-height: 300px; }
+.d0 { fill: var(--dotA); }
+.d1 { fill: var(--dotB); }
+.jumps { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.jump { padding: 3px 10px; border: 2px solid var(--line); border-radius: 999px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.jump.last { background: var(--hl); color: var(--on-hl); }
+.hint { border-left: 6px solid var(--hl); padding: 2px 0 2px 12px; }
+.hint h3 { font-size: 18px; margin-bottom: 2px; }
+.rows { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font: 700 18px var(--body);
+  font-variant-numeric: tabular-nums;
+  min-height: 48px;
+}
+.row b { font-family: var(--display); font-size: 20px; }
+.row.on { background: var(--hl); color: var(--on-hl); }
+
+/* Gioco */
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.seg button {
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  font: 800 17px var(--display);
+  min-height: 48px;
+}
+.seg button[aria-checked="true"] { background: var(--hl); color: var(--on-hl); box-shadow: 2px 2px 0 var(--shadow); }
+.info { color: var(--muted); font-weight: 700; }
+.playhead { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pdots { display: flex; flex-wrap: wrap; gap: 6px; }
+.pdots span { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--line); }
+.pdots .ok { background: var(--ok); }
+.pdots .bad { background: var(--bad); }
+.pdots .cur { background: var(--hl); }
+.timer { flex: 1; display: flex; align-items: center; gap: 10px; }
+.timer .track { flex: 1; height: 16px; border: 2px solid var(--line); border-radius: 999px; overflow: hidden; }
+.timer #bar { height: 100%; width: 100%; background: var(--ok); }
+.timer b { font-family: var(--display); font-size: 20px; min-width: 2ch; text-align: right; }
+.score { font-weight: 800; white-space: nowrap; }
+.qrow { display: flex; align-items: baseline; justify-content: center; gap: 14px; flex-wrap: wrap; padding: 6px 0; }
+.q { font-family: var(--display); font-size: clamp(40px, 12vw, 64px); line-height: 1.1; }
+.ans {
+  font-family: var(--display);
+  font-size: clamp(40px, 12vw, 64px);
+  line-height: 1.1;
+  min-width: 3.2ch;
+  text-align: center;
+  border-bottom: 5px solid var(--line);
+}
+.ans.empty { color: var(--muted); }
+.ans.ok { color: var(--ok); border-color: var(--ok); }
+.ans.bad { color: var(--bad); border-color: var(--bad); }
+.fb { min-height: 28px; text-align: center; font-weight: 800; font-size: 20px; }
+.fb.bad { color: var(--bad); }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 320px; width: 100%; margin: 0 auto; }
+.keypad button {
+  height: 60px;
+  background: var(--paper);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  font: 800 26px var(--display);
+  box-shadow: 2px 2px 0 var(--shadow);
+}
+.keypad button:active { transform: translate(2px, 2px); box-shadow: none; }
+.keypad .k-ok { background: var(--hl); color: var(--on-hl); }
+.keypad .k-del { color: var(--muted); }
+.stars { display: flex; justify-content: center; gap: 6px; }
+.stars svg { width: 56px; height: 56px; }
+.stars .on { fill: var(--hl); stroke: var(--line); stroke-width: 1.4; stroke-linejoin: round; }
+.stars .off { fill: none; stroke: var(--line); stroke-width: 1.4; stroke-linejoin: round; stroke-dasharray: 2 2; }
+.big { font-family: var(--display); font-size: clamp(40px, 12vw, 60px); line-height: 1; text-align: center; }
+.center { text-align: center; }
+.wl { display: flex; flex-wrap: wrap; gap: 8px; }
+.wl span { border: 2px solid var(--line); border-radius: 10px; padding: 4px 10px; font-weight: 800; font-variant-numeric: tabular-nums; background: var(--m1); color: var(--on-m); }
+
+/* Mappa */
+.map { display: grid; grid-template-columns: repeat(11, 1fr); gap: 3px; }
+.map .lab { display: flex; align-items: center; justify-content: center; font: 800 14px var(--display); color: var(--muted); min-height: 24px; }
+.cell {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  font: 700 clamp(10px, 2.5vw, 15px) var(--body);
+  font-variant-numeric: tabular-nums;
+  color: var(--on-m);
+}
+.cell.l0 { background: transparent; border-style: dashed; color: var(--muted); }
+.cell.l1 { background: var(--m1); }
+.cell.l2 { background: var(--m2); }
+.cell.l3 { background: var(--m3); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; font-weight: 700; font-size: 14px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 18px; height: 18px; border: 2px solid var(--line); border-radius: 5px; display: inline-block; }
+.legend .l0 { border-style: dashed; }
+.legend .l1 { background: var(--m1); }
+.legend .l2 { background: var(--m2); }
+.legend .l3 { background: var(--m3); }
+.counts { display: flex; flex-wrap: wrap; gap: 8px 18px; font-weight: 800; }
+
+@media (max-width: 440px) {
+  .monster { width: 84px; }
+  .pal { gap: 14px; }
+  .bubble { font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .monster, .monster .eyes { animation: none !important; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="top">
+    <h1>Mostro Tabelline</h1>
+    <div class="eaten"><b class="num" id="eatenN">0</b><small>risposte mangiate</small></div>
+  </header>
+
+  <section class="card pal" aria-label="Il Mostro">
+    <svg id="monster" class="monster" data-mood="idle" viewBox="0 0 160 150" role="img" aria-label="Il Mostro Tabelline">
+      <path d="M48 24 L38 2 L64 14 Z" fill="var(--monster-dark)"/>
+      <path d="M112 24 L122 2 L96 14 Z" fill="var(--monster-dark)"/>
+      <path d="M20 100 C10 40 50 10 80 10 C110 10 150 40 140 100 C138 130 115 142 80 142 C45 142 22 130 20 100 Z" fill="var(--monster)"/>
+      <ellipse cx="80" cy="122" rx="40" ry="16" fill="var(--monster-dark)" opacity=".18"/>
+      <g class="eyes">
+        <circle cx="58" cy="60" r="16" fill="#fff"/>
+        <circle cx="102" cy="60" r="16" fill="#fff"/>
+        <circle cx="60" cy="62" r="7" fill="#1b1f3b"/>
+        <circle cx="100" cy="62" r="7" fill="#1b1f3b"/>
+      </g>
+      <circle cx="36" cy="88" r="7" fill="#ff8fa3" opacity=".6"/>
+      <circle cx="124" cy="88" r="7" fill="#ff8fa3" opacity=".6"/>
+      <path class="m-idle" d="M60 98 Q80 114 100 98" fill="none" stroke="#1b1f3b" stroke-width="5" stroke-linecap="round"/>
+      <g class="m-happy">
+        <path d="M54 92 Q80 136 106 92 Z" fill="#5a1b3d"/>
+        <ellipse cx="80" cy="106" rx="12" ry="7" fill="#ff7a90"/>
+      </g>
+      <path class="m-oops" d="M64 110 Q80 94 96 110" fill="none" stroke="#1b1f3b" stroke-width="5" stroke-linecap="round"/>
+    </svg>
+    <p class="bubble" id="bubble" aria-live="polite">Scegli una tabellina e tocca le righe: guarda come crescono i gruppi!</p>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="Sezioni">
+    <button class="tab" role="tab" id="t-scopri" data-tab="scopri" aria-selected="true" aria-controls="p-scopri">Scopri</button>
+    <button class="tab" role="tab" id="t-gioca" data-tab="gioca" aria-selected="false" aria-controls="p-gioca">Gioca</button>
+    <button class="tab" role="tab" id="t-mappa" data-tab="mappa" aria-selected="false" aria-controls="p-mappa">Mappa</button>
+  </nav>
+
+  <!-- SCOPRI -->
+  <section id="p-scopri" role="tabpanel" aria-labelledby="t-scopri" class="stack">
+    <div class="card stack">
+      <div class="label">Scegli la tabellina</div>
+      <div class="chips" id="nChips"></div>
+    </div>
+    <div class="card stack">
+      <div>
+        <div class="eq num" id="eq">3 × 4 = 12</div>
+        <div class="eq-sub" id="eqSub"></div>
+      </div>
+      <div class="arr-wrap"><svg id="arr" role="img" aria-label="Puntini che mostrano la moltiplicazione"></svg></div>
+      <div class="jumps"><span class="label">Salti</span><span id="jumps" class="jumps"></span></div>
+    </div>
+    <div class="card hint">
+      <h3 id="hintT">Il trucco</h3>
+      <p id="hintP"></p>
+    </div>
+    <div class="card stack">
+      <div class="label">Tocca una riga</div>
+      <div class="rows" id="rows"></div>
+      <div class="btns"><button class="btn" id="goPlay" type="button">Allenati</button></div>
+    </div>
+  </section>
+
+  <!-- GIOCA -->
+  <section id="p-gioca" role="tabpanel" aria-labelledby="t-gioca" class="stack" hidden>
+    <div id="v-setup" class="card stack">
+      <div class="label">Come vuoi giocare?</div>
+      <div class="seg" role="radiogroup" aria-label="Modalità">
+        <button type="button" role="radio" id="m-round" aria-checked="true">10 domande</button>
+        <button type="button" role="radio" id="m-timed" aria-checked="false">60 secondi</button>
+      </div>
+      <div class="label">Quali tabelline?</div>
+      <div class="chips" id="selChips"></div>
+      <div class="btns">
+        <button type="button" class="ghost" id="qAll">Tutte</button>
+        <button type="button" class="ghost" id="qHard">Le difficili (6-9)</button>
+      </div>
+      <p class="info" id="setupInfo"></p>
+      <div class="btns"><button type="button" class="btn" id="startBtn">Via!</button></div>
+    </div>
+
+    <div id="v-play" class="card stack" hidden>
+      <div class="playhead">
+        <div id="progRound" class="pdots" aria-label="Avanzamento"></div>
+        <div id="progTimed" class="timer" hidden>
+          <div class="track"><div id="bar"></div></div>
+          <b class="num" id="secs">60</b>
+          <span class="score num" id="score">0 giuste</span>
+        </div>
+        <button type="button" class="ghost" id="exitBtn">Esci</button>
+      </div>
+      <div class="qrow">
+        <span class="q num" id="qText">7 × 8 =</span>
+        <span class="ans num empty" id="ansBox">?</span>
+      </div>
+      <div class="fb" id="fb" aria-live="polite"></div>
+      <div class="btns" style="justify-content:center"><button type="button" class="btn" id="nextBtn" hidden>Avanti</button></div>
+      <div class="keypad" id="keypad"></div>
+    </div>
+
+    <div id="v-result" class="card stack" hidden>
+      <div id="resStars" class="stars"></div>
+      <div class="big num" id="resBig"></div>
+      <p class="center info" id="resSub"></p>
+      <div id="resWrongBox" class="stack" hidden>
+        <div class="label">Da ripassare</div>
+        <div class="wl" id="resWrong"></div>
+      </div>
+      <div class="btns" style="justify-content:center">
+        <button type="button" class="btn" id="againBtn">Ancora!</button>
+        <button type="button" class="btn plain" id="reviewBtn" hidden>Ripassa gli errori</button>
+        <button type="button" class="btn plain" id="changeBtn">Cambia tabelline</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAPPA -->
+  <section id="p-mappa" role="tabpanel" aria-labelledby="t-mappa" class="stack" hidden>
+    <div class="card stack">
+      <div class="counts num" id="counts"></div>
+      <div class="map" id="map"></div>
+      <div class="legend">
+        <span><i class="l0"></i>Mai provata</span>
+        <span><i class="l1"></i>Da ripassare</span>
+        <span><i class="l2"></i>In allenamento</span>
+        <span><i class="l3"></i>Imparata</span>
+      </div>
+      <p class="info">Tocca un numero per vedere quella moltiplicazione nella scheda Scopri.</p>
+      <div class="btns" id="resetRow"><button type="button" class="ghost" id="resetBtn">Azzera i progressi</button></div>
+    </div>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var pick = function (a) { return a[Math.floor(Math.random() * a.length)]; };
+
+  /* ---------- Salvataggio (solo su questo browser) ---------- */
+  var STORE = "mostro-tabelline-v1";
+  var save = { facts: {}, eaten: 0, best: 0 };
+  try {
+    var raw = localStorage.getItem(STORE);
+    if (raw) {
+      var o = JSON.parse(raw);
+      if (o && typeof o === "object") {
+        save.facts = o.facts && typeof o.facts === "object" ? o.facts : {};
+        save.eaten = o.eaten | 0;
+        save.best = o.best | 0;
+      }
+    }
+  } catch (e) {}
+  function persist() { try { localStorage.setItem(STORE, JSON.stringify(save)); } catch (e) {} }
+  function key(a, b) { return a < b ? a + "x" + b : b + "x" + a; }
+  function lvl(a, b) { return save.facts[key(a, b)] || 0; }
+  function record(a, b, ok) {
+    var k = key(a, b), l = save.facts[k] || 0;
+    save.facts[k] = ok ? Math.min(3, l === 0 ? 2 : l + 1) : 1;
+    if (ok) save.eaten++;
+    persist();
+    $("eatenN").textContent = save.eaten;
+  }
+
+  /* ---------- Stato ---------- */
+  var S = { tab: "scopri", n: 3, k: 4, sel: [3], mode: "round" };
+  var G = null;
+
+  var HINTS = {
+    1: "Un gruppo solo: il numero resta uguale. 1 × 8 = 8.",
+    2: "È il doppio: 2 × 7 = 7 + 7 = 14. I risultati sono sempre pari.",
+    3: "Conta a salti di 3: 3, 6, 9, 12, 15… Oppure fai il doppio e aggiungi un gruppo: 3 × 6 = 12 + 6 = 18.",
+    4: "È il doppio del doppio: 4 × 6 → 6 + 6 = 12, poi 12 + 12 = 24.",
+    5: "Finisce sempre con 0 o 5. È la metà di ×10: 5 × 8 = 80 diviso 2 = 40.",
+    6: "È ×5 più un gruppo in più: 6 × 7 = 5 × 7 + 7 = 35 + 7 = 42.",
+    7: "È la più dura. Ricorda la fila 5, 6, 7, 8: 56 = 7 × 8. Poi 7 × 7 = 49.",
+    8: "È il doppio di ×4. Ricorda 8 × 8 = 64 e 56 = 7 × 8.",
+    9: "È ×10 meno un gruppo: 9 × 6 = 60 − 6 = 54. Le cifre del risultato sommano sempre 9.",
+    10: "Aggiungi uno zero: 10 × 7 = 70."
+  };
+  var IDLE = {
+    scopri: "Scegli una tabellina e tocca le righe: guarda come crescono i gruppi!",
+    gioca: "Ho fame! Dammi risposte giuste e le mangio tutte.",
+    mappa: "Ogni risposta giusta colora la mappa. Quanto verde riesci a fare?"
+  };
+  var YUM = ["Gnam! Buonissima!", "Che bontà!", "Ancora, ancora!", "Squisita!", "Giusto! Ne voglio un'altra!"];
+
+  /* ---------- Mostro ---------- */
+  var mon = $("monster"), bub = $("bubble");
+  function say(msg, mood, anim) {
+    if (msg != null) bub.textContent = msg;
+    mon.setAttribute("data-mood", mood || "idle");
+    mon.classList.remove("bounce", "wobble");
+    if (anim) { void mon.getBoundingClientRect(); mon.classList.add(anim); }
+  }
+
+  /* ---------- Chip ---------- */
+  function chipRow(box, isOn, onClick) {
+    box.innerHTML = "";
+    for (var i = 1; i <= 10; i++) {
+      (function (i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "chip";
+        b.textContent = i;
+        b.setAttribute("aria-pressed", isOn(i) ? "true" : "false");
+        b.setAttribute("aria-label", "Tabellina del " + i);
+        b.onclick = function () { onClick(i); };
+        box.appendChild(b);
+      })(i);
+    }
+  }
+
+  /* ---------- Schede ---------- */
+  var PANELS = ["scopri", "gioca", "mappa"];
+  function setTab(t) {
+    if (S.tab === "gioca" && t !== "gioca") stopGame();
+    S.tab = t;
+    PANELS.forEach(function (p) {
+      $("p-" + p).hidden = p !== t;
+      $("t-" + p).setAttribute("aria-selected", p === t ? "true" : "false");
+    });
+    if (t === "scopri") renderScopri();
+    if (t === "gioca") { showView("setup"); renderSetup(); }
+    if (t === "mappa") renderMappa();
+    say(IDLE[t], "idle");
+  }
+  PANELS.forEach(function (p) { $("t-" + p).onclick = function () { setTab(p); }; });
+
+  /* ---------- Scopri ---------- */
+  function renderScopri() {
+    var n = S.n, k = S.k, cell = 26;
+    chipRow($("nChips"), function (i) { return i === n; }, function (i) { S.n = i; renderScopri(); });
+    $("eq").textContent = n + " × " + k + " = " + (n * k);
+    $("eqSub").textContent = k + (k === 1 ? " gruppo" : " gruppi") + " da " + n + (n !== k ? " · uguale a " + k + " × " + n : "");
+    var c = "";
+    for (var r = 0; r < k; r++) for (var q = 0; q < n; q++) {
+      c += '<circle class="d' + (r % 2) + '" cx="' + (q * cell + 13) + '" cy="' + (r * cell + 13) + '" r="9"/>';
+    }
+    var svg = $("arr");
+    svg.setAttribute("viewBox", "0 0 " + (n * cell) + " " + (k * cell));
+    svg.style.maxWidth = Math.max(90, n * cell * 1.3) + "px";
+    svg.innerHTML = c;
+    var j = "";
+    for (var i = 1; i <= k; i++) j += '<span class="jump' + (i === k ? " last" : "") + '">' + (i * n) + "</span>";
+    $("jumps").innerHTML = j;
+    $("hintT").textContent = "Il trucco del " + n;
+    $("hintP").textContent = HINTS[n];
+    var rows = $("rows");
+    rows.innerHTML = "";
+    for (var m = 1; m <= 10; m++) {
+      (function (m) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "row" + (m === k ? " on" : "");
+        b.setAttribute("aria-pressed", m === k ? "true" : "false");
+        b.innerHTML = "<span>" + n + " × " + m + "</span><b>" + (n * m) + "</b>";
+        b.onclick = function () { S.k = m; renderScopri(); };
+        rows.appendChild(b);
+      })(m);
+    }
+    $("goPlay").textContent = "Allenati con il " + n;
+  }
+  $("goPlay").onclick = function () { S.sel = [S.n]; setTab("gioca"); };
+
+  /* ---------- Gioca: impostazione ---------- */
+  function buildPool() {
+    var seen = {}, out = [];
+    S.sel.forEach(function (t) {
+      for (var b = 1; b <= 10; b++) {
+        var k = key(t, b);
+        if (!seen[k]) { seen[k] = 1; out.push([t, b]); }
+      }
+    });
+    return out;
+  }
+  function showView(v) {
+    $("v-setup").hidden = v !== "setup";
+    $("v-play").hidden = v !== "play";
+    $("v-result").hidden = v !== "result";
+  }
+  function renderSetup() {
+    chipRow($("selChips"), function (i) { return S.sel.indexOf(i) >= 0; }, function (i) {
+      var x = S.sel.indexOf(i);
+      if (x >= 0) { if (S.sel.length > 1) S.sel.splice(x, 1); }
+      else S.sel.push(i);
+      S.sel.sort(function (a, b) { return a - b; });
+      renderSetup();
+    });
+    $("m-round").setAttribute("aria-checked", S.mode === "round" ? "true" : "false");
+    $("m-timed").setAttribute("aria-checked", S.mode === "timed" ? "true" : "false");
+    var pool = buildPool();
+    $("setupInfo").textContent = S.sel.length + (S.sel.length === 1 ? " tabellina" : " tabelline") + " · " + pool.length + " moltiplicazioni diverse";
+  }
+  $("m-round").onclick = function () { S.mode = "round"; renderSetup(); };
+  $("m-timed").onclick = function () { S.mode = "timed"; renderSetup(); };
+  $("qAll").onclick = function () { S.sel = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]; renderSetup(); };
+  $("qHard").onclick = function () { S.sel = [6, 7, 8, 9]; renderSetup(); };
+  $("startBtn").onclick = function () { startGame(null); };
+
+  /* ---------- Gioca: partita ---------- */
+  function weight(f) { return [3, 5, 2, 1][lvl(f[0], f[1])]; }
+  function wpick(arr) {
+    var tot = 0, i;
+    for (i = 0; i < arr.length; i++) tot += weight(arr[i]);
+    var r = Math.random() * tot;
+    for (i = 0; i < arr.length; i++) { r -= weight(arr[i]); if (r <= 0) return i; }
+    return arr.length - 1;
+  }
+  function makeRound(pool) {
+    var p = pool.slice(), q = [];
+    while (q.length < 10 && p.length) q.push(p.splice(wpick(p), 1)[0]);
+    return q;
+  }
+  function shuffle(a) {
+    for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)), t = a[i]; a[i] = a[j]; a[j] = t; }
+    return a;
+  }
+  function orient(f) { return Math.random() < 0.5 ? [f[1], f[0]] : [f[0], f[1]]; }
+  function later(fn, ms) {
+    var g = G;
+    g.timers.push(setTimeout(function () { if (G === g) fn(); }, ms));
+  }
+  function stopGame() {
+    if (G) { clearInterval(G.tick); G.timers.forEach(clearTimeout); G = null; }
+  }
+
+  function startGame(list) {
+    stopGame();
+    var mode = list ? "round" : S.mode;
+    var pool = list || buildPool();
+    G = {
+      mode: mode, pool: pool,
+      queue: mode === "round" ? (list ? shuffle(list.slice()) : makeRound(pool)) : null,
+      i: 0, correct: 0, res: [], wrong: [], streak: 0,
+      input: "", locked: false, waitNext: false, cur: null, last: null,
+      timers: [], tick: null, end: 0
+    };
+    showView("play");
+    $("progRound").hidden = mode !== "round";
+    $("progTimed").hidden = mode !== "timed";
+    if (mode === "timed") {
+      G.end = Date.now() + 60000;
+      G.tick = setInterval(tick, 100);
+      tick();
+    }
+    say(mode === "timed" ? "60 secondi! Dammi più risposte che puoi!" : "Si comincia! Una alla volta.", "idle");
+    nextQ();
+  }
+  function tick() {
+    if (!G) return;
+    var left = Math.max(0, G.end - Date.now());
+    $("bar").style.width = (left / 600) + "%";
+    $("secs").textContent = Math.ceil(left / 1000);
+    if (left <= 0) finish();
+  }
+  function nextQ() {
+    var f;
+    if (G.mode === "round") {
+      if (G.i >= G.queue.length) return finish();
+      f = G.queue[G.i];
+    } else {
+      var tries = 0;
+      do { f = G.pool[wpick(G.pool)]; tries++; } while (G.pool.length > 1 && key(f[0], f[1]) === G.last && tries < 8);
+    }
+    G.last = key(f[0], f[1]);
+    G.cur = orient(f);
+    G.input = "";
+    G.locked = false;
+    G.waitNext = false;
+    renderQ();
+    if (mon.getAttribute("data-mood") !== "idle") say(null, "idle");
+  }
+  function renderQ() {
+    var a = G.cur[0], b = G.cur[1];
+    $("qText").textContent = a + " × " + b + " =";
+    setAns();
+    $("fb").textContent = "";
+    $("fb").className = "fb";
+    $("nextBtn").hidden = true;
+    if (G.mode === "round") {
+      var h = "";
+      for (var i = 0; i < G.queue.length; i++) {
+        var c = i < G.res.length ? G.res[i] : (i === G.i ? "cur" : "");
+        h += '<span class="' + c + '"></span>';
+      }
+      $("progRound").innerHTML = h;
+    } else {
+      $("score").textContent = G.correct + (G.correct === 1 ? " giusta" : " giuste");
+    }
+  }
+  function setAns(state) {
+    var box = $("ansBox");
+    box.textContent = G.input || "?";
+    box.className = "ans num" + (G.input ? "" : " empty") + (state ? " " + state : "");
+  }
+  function press(d) {
+    if (!G || G.locked || G.input.length >= 3) return;
+    G.input += d;
+    setAns();
+    if (G.input.length >= String(G.cur[0] * G.cur[1]).length) submit();
+  }
+  function back() {
+    if (!G || G.locked) return;
+    G.input = G.input.slice(0, -1);
+    setAns();
+  }
+  function submit() {
+    if (!G || G.locked || !G.input) return;
+    G.locked = true;
+    var a = G.cur[0], b = G.cur[1], ans = a * b, ok = parseInt(G.input, 10) === ans;
+    record(a, b, ok);
+    if (G.mode === "round") G.res.push(ok ? "ok" : "bad");
+    if (ok) {
+      G.correct++; G.streak++;
+      setAns("ok");
+      $("fb").textContent = "Giusto!";
+      var msg = G.streak >= 3 ? G.streak + " di fila! Gnam gnam gnam!" : pick(YUM);
+      say(msg, "happy", "bounce");
+      if (G.mode === "round") G.i++;
+      if (G.mode === "timed") $("score").textContent = G.correct + (G.correct === 1 ? " giusta" : " giuste");
+      later(nextQ, 650);
+    } else {
+      G.streak = 0;
+      G.wrong.push([a, b]);
+      setAns("bad");
+      $("fb").className = "fb bad";
+      $("fb").textContent = a + " × " + b + " = " + ans;
+      say("Ahi, indigesta! " + a + " × " + b + " fa " + ans + ".", "oops", "wobble");
+      if (G.mode === "round") {
+        G.i++;
+        G.waitNext = true;
+        $("nextBtn").hidden = false;
+        $("nextBtn").focus();
+      } else {
+        later(nextQ, 1000);
+      }
+    }
+  }
+  function goNext() { if (G && G.waitNext) nextQ(); }
+
+  /* Tastierino */
+  (function () {
+    var kp = $("keypad");
+    var keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "del", "0", "ok"];
+    keys.forEach(function (k) {
+      var b = document.createElement("button");
+      b.type = "button";
+      if (k === "del") { b.textContent = "⌫"; b.className = "k-del"; b.setAttribute("aria-label", "Cancella"); b.onclick = back; }
+      else if (k === "ok") { b.textContent = "OK"; b.className = "k-ok"; b.onclick = submit; }
+      else { b.textContent = k; b.onclick = function () { press(k); }; }
+      kp.appendChild(b);
+    });
+  })();
+  $("nextBtn").onclick = goNext;
+  $("exitBtn").onclick = function () { stopGame(); showView("setup"); renderSetup(); say(IDLE.gioca, "idle"); };
+  document.addEventListener("keydown", function (e) {
+    if (!G || S.tab !== "gioca" || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (/^[0-9]$/.test(e.key)) { press(e.key); e.preventDefault(); }
+    else if (e.key === "Backspace") { back(); e.preventDefault(); }
+    else if (e.key === "Enter") {
+      if (e.target && e.target.id === "exitBtn") return;
+      if (G.waitNext) goNext(); else submit();
+      e.preventDefault();
+    }
+  });
+
+  /* ---------- Risultato ---------- */
+  var STAR = '<svg viewBox="0 0 24 24" aria-hidden="true"><polygon class="CLS" points="12,2 15,9 22,9.5 16.5,14 18.5,21.5 12,17.5 5.5,21.5 7.5,14 2,9.5 9,9"/></svg>';
+  function finish() {
+    var g = G;
+    clearInterval(g.tick);
+    g.timers.forEach(clearTimeout);
+    G = null;
+    showView("result");
+    var wrongBox = $("resWrongBox");
+    var wl = $("resWrong");
+    wl.innerHTML = "";
+    g.wrong.forEach(function (w) {
+      var s = document.createElement("span");
+      s.textContent = w[0] + " × " + w[1] + " = " + (w[0] * w[1]);
+      wl.appendChild(s);
+    });
+    wrongBox.hidden = g.wrong.length === 0;
+    $("reviewBtn").hidden = g.wrong.length === 0;
+    $("reviewBtn").onclick = function () { startGame(g.wrong.map(function (w) { return [w[0], w[1]]; })); };
+    $("againBtn").onclick = function () { startGame(null); };
+    $("changeBtn").onclick = function () { showView("setup"); renderSetup(); say(IDLE.gioca, "idle"); };
+    if (g.mode === "round") {
+      var total = g.res.length || 1, pct = g.correct / total;
+      var stars = pct >= 0.9 ? 3 : pct >= 0.7 ? 2 : 1;
+      var s = "";
+      for (var i = 1; i <= 3; i++) s += STAR.replace("CLS", i <= stars ? "on" : "off");
+      $("resStars").innerHTML = s;
+      $("resStars").hidden = false;
+      $("resBig").textContent = g.correct + " su " + total;
+      $("resSub").textContent = stars === 3 ? "Perfetto, tabellina da campioni!" : stars === 2 ? "Molto bene! Ripassa gli errori e sei al top." : "Ogni errore è un boccone da digerire. Riprova!";
+      say(stars === 3 ? "Che banchetto! Pancia piena!" : stars === 2 ? "Buono, ma ho ancora un buco nello stomaco." : "Ne ho mangiate un po'. Rifacciamo?", stars >= 2 ? "happy" : "idle", stars >= 2 ? "bounce" : null);
+    } else {
+      var rec = g.correct > save.best;
+      if (rec) { save.best = g.correct; persist(); }
+      $("resStars").hidden = true;
+      $("resBig").textContent = g.correct + (g.correct === 1 ? " risposta" : " risposte");
+      $("resSub").textContent = rec ? "Nuovo record!" : "Il tuo record è " + save.best + ".";
+      say(rec ? "Record! Non ho mai mangiato così tanto!" : "Tempo scaduto! Che corsa!", "happy", "bounce");
+    }
+  }
+
+  /* ---------- Mappa ---------- */
+  var LV = ["mai provata", "da ripassare", "in allenamento", "imparata"];
+  function renderMappa() {
+    var h = "<span></span>", r, c;
+    for (c = 1; c <= 10; c++) h += '<span class="lab">' + c + "</span>";
+    for (r = 1; r <= 10; r++) {
+      h += '<span class="lab">' + r + "</span>";
+      for (c = 1; c <= 10; c++) {
+        var l = lvl(r, c);
+        h += '<button type="button" class="cell l' + l + '" data-r="' + r + '" data-c="' + c + '" aria-label="' + r + " per " + c + " fa " + (r * c) + ", " + LV[l] + '">' + (r * c) + "</button>";
+      }
+    }
+    $("map").innerHTML = h;
+    var cnt = [0, 0, 0, 0];
+    for (r = 1; r <= 10; r++) for (c = r; c <= 10; c++) cnt[lvl(r, c)]++;
+    $("counts").innerHTML = "<span>Imparate: " + cnt[3] + " su 55</span><span>In allenamento: " + cnt[2] + "</span><span>Da ripassare: " + cnt[1] + "</span>";
+    resetRow(false);
+  }
+  $("map").onclick = function (e) {
+    var b = e.target.closest ? e.target.closest(".cell") : null;
+    if (!b) return;
+    S.n = +b.getAttribute("data-r");
+    S.k = +b.getAttribute("data-c");
+    setTab("scopri");
+  };
+  function resetRow(confirming) {
+    var row = $("resetRow");
+    if (!confirming) {
+      row.innerHTML = '<button type="button" class="ghost" id="resetBtn">Azzera i progressi</button>';
+      $("resetBtn").onclick = function () { resetRow(true); };
+    } else {
+      row.innerHTML = '<span class="info">Sicuro? Si perde tutto.</span><button type="button" class="ghost" id="resetYes">Sì, azzera</button><button type="button" class="ghost" id="resetNo">No</button>';
+      $("resetYes").onclick = function () {
+        save = { facts: {}, eaten: 0, best: 0 };
+        persist();
+        $("eatenN").textContent = 0;
+        renderMappa();
+      };
+      $("resetNo").onclick = function () { resetRow(false); };
+    }
+  }
+
+  /* ---------- Avvio ---------- */
+  var hot = window.claude && window.claude.hot;
+  if (hot && hot.snapshot) hot.snapshot(function () { return { tab: S.tab, n: S.n, k: S.k, sel: S.sel, mode: S.mode }; });
+  function int10(v, d) { v = v | 0; return v >= 1 && v <= 10 ? v : d; }
+  function start(d) {
+    d = d || {};
+    S.n = int10(d.n, S.n);
+    S.k = int10(d.k, S.k);
+    if (Array.isArray(d.sel)) {
+      var s = d.sel.map(function (x) { return x | 0; }).filter(function (x) { return x >= 1 && x <= 10; });
+      if (s.length) S.sel = s;
+    }
+    if (d.mode === "round" || d.mode === "timed") S.mode = d.mode;
+    $("eatenN").textContent = save.eaten;
+    setTab(PANELS.indexOf(d.tab) >= 0 ? d.tab : "scopri");
+  }
+  if (hot && hot.ready) hot.ready(start); else start(hot && hot.data ? hot.data : {});
+})();
+</script>
+</body>
+</html>
